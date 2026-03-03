@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Lehigh Transit Enhancer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com"/>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        :root{--bg:#0a0c10;--surface:#111318;--surf2:#181c24;--border:#1e2430;--accent:#8b5cf6;--cyan:#06b6d4;--amber:#f59e0b;--ok:#10b981;--warn:#f59e0b;--danger:#ef4444;--text:#e2e8f0;--muted:#64748b;--mono:'Space Mono',monospace;--sans:'DM Sans',sans-serif}
+        *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+        body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh;display:grid;grid-template-rows:52px 1fr;overflow:hidden}
+        header{display:flex;align-items:center;gap:14px;padding:0 20px;background:var(--surface);border-bottom:1px solid var(--border);z-index:300}
+        .logo{font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:.1em;color:var(--accent);text-transform:uppercase}
+        .logo span{color:var(--text)}.gap{flex:1}
+        .pill{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11px;color:var(--muted);background:var(--surf2);border:1px solid var(--border);border-radius:999px;padding:4px 12px}
+        .dot{width:7px;height:7px;border-radius:50%;background:var(--muted);transition:background .3s;flex-shrink:0}
+        .dot.live{background:var(--ok);box-shadow:0 0 7px var(--ok);animation:blink 2s infinite}.dot.error{background:var(--danger)}
+        @keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
+        #ts{font-family:var(--mono);font-size:11px;color:var(--muted)}
+        main{display:grid;grid-template-columns:288px 1fr;overflow:hidden}
+        aside{background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+        .block{padding:13px 15px;border-bottom:1px solid var(--border);flex-shrink:0}
+        .blabel{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.13em;color:var(--muted);text-transform:uppercase;margin-bottom:10px}
+        .grid2{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+        .mcard{background:var(--surf2);border:1px solid var(--border);border-radius:7px;padding:9px 11px;position:relative;overflow:hidden}
+        .mcard::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--accent)}
+        .mcard.g::before{background:var(--ok)}.mcard.c::before{background:var(--cyan)}.mcard.a::before{background:var(--amber)}
+        .mval{font-family:var(--mono);font-size:19px;font-weight:700;color:var(--text);line-height:1;margin-bottom:3px}
+        .mlbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+        .spark-wrap{height:46px;position:relative;margin-bottom:4px}
+        #spark{position:absolute;inset:0;width:100%;height:100%}
+        .spark-foot{display:flex;justify-content:space-between}
+        .spark-foot span{font-family:var(--mono);font-size:10px;color:var(--muted)}
+        #m-throughput{color:var(--text)}
+        .lat-row{display:flex;align-items:center;margin-bottom:5px}
+        .lat-key{font-family:var(--mono);font-size:11px;color:var(--muted);width:34px}
+        .lat-track{flex:1;height:5px;background:var(--surf2);border-radius:3px;margin:0 9px;overflow:hidden}
+        .lat-fill{height:100%;border-radius:3px;background:var(--accent);transition:width .5s}
+        .lat-val{font-family:var(--mono);font-size:11px;color:var(--text);width:38px;text-align:right}
+        .bus-scroll{flex:1;overflow-y:auto;padding:6px 0;min-height:0}
+        .bus-scroll::-webkit-scrollbar{width:3px}.bus-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+        .bitem{display:flex;align-items:center;gap:9px;padding:7px 15px;cursor:pointer;border-left:2px solid transparent;transition:background .13s}
+        .bitem:hover{background:var(--surf2)}.bitem.sel{background:var(--surf2);border-left-color:var(--accent)}
+        .bdot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+        .bid{font-family:var(--mono);font-size:12px;font-weight:700;flex:1}
+        .bspd{font-family:var(--mono);font-size:11px;color:var(--muted)}
+        .badge{font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 5px;border-radius:3px;text-transform:uppercase;letter-spacing:.04em}
+        .bHIGH{background:rgba(16,185,129,.14);color:var(--ok)}.bLOW{background:rgba(245,158,11,.14);color:var(--warn)}.bSTALE{background:rgba(239,68,68,.14);color:var(--danger)}
+        .empty{text-align:center;padding:36px 14px;color:var(--muted);font-size:13px}.empty-icon{font-size:28px;margin-bottom:7px}
+        #map-wrap{position:relative;overflow:hidden}
+        #map{width:100%;height:100%;background:#0a0c10}
+        #hud{position:absolute;top:13px;left:13px;background:rgba(10,12,16,.88);border:1px solid var(--border);border-radius:8px;padding:9px 13px;z-index:500}
+        .hline{font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:2px}.hline:last-child{margin-bottom:0}.hline b{color:var(--text);font-weight:700}
+        #fbar{position:absolute;top:13px;right:13px;display:flex;gap:5px;z-index:500}
+        .fbtn{font-family:var(--mono);font-size:10px;font-weight:700;padding:5px 10px;border-radius:5px;border:1px solid var(--border);background:rgba(10,12,16,.88);color:var(--muted);cursor:pointer;text-transform:uppercase;letter-spacing:.05em;transition:all .13s}
+        .fbtn:hover{color:var(--text);border-color:var(--muted)}.fbtn.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+        #detail{position:absolute;bottom:18px;right:18px;width:252px;background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:15px;z-index:600;display:none;animation:slidein .2s ease-out}
+        @keyframes slidein{from{transform:translateY(8px);opacity:0}to{transform:none;opacity:1}}
+        #detail.show{display:block}
+        .dhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px}
+        .dname{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--accent)}
+        .dclose{background:none;border:none;color:var(--muted);font-size:15px;cursor:pointer;padding:2px 4px}
+        .drow{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border)}.drow:last-child{border-bottom:none}
+        .dkey{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+        .dval{font-family:var(--mono);font-size:12px;font-weight:700}
+        .leaflet-tile{filter:brightness(.62) saturate(.35) hue-rotate(195deg)}.leaflet-container{background:#0a0c10}
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">🚍 Lehigh <span>Transit Enhancer</span></div>
+        <div class="pill"><div class="dot" id="dot"></div><span id="status">CONNECTING</span></div>
+        <div class="gap"></div><span id="ts">-</span>
+    </header>
+    <main>
+        <aside>
+            <div class="block">
+                <div class="blabel">System Metrics</div>
+                <div class="grid2">
+                    <div class="mcard g"><div class="mval" id="m-active">-</div><div class="mlbl">Active Buses</div></div>
+                    <div class="mcard c"><div class="mval" id="m-acc">-</div><div class="mlbl">Accuracy %</div></div>
+                    <div class="mcard"><div class="mval" id="m-proc">-</div><div class="mlbl">Processed</div></div>
+                    <div class="mcard a"><div class="mval" id="m-rej">-</div><div class="mlbl">Filtered</div></div>
+                </div>
+            </div>
+            <div class="block">
+                <div class="blabel">Throughput (msg / s)</div>
+                <div class="spark-wrap"><canvas id="spark"></canvas></div>
+                <div class="spark-foot"><span>60s ago</span><span id="m-throughput">- /s</span><span>now</span></div>
+            </div>
+            <div class="block">
+                <div class="blabel">Processing Latency</div>
+                <div class="lat-row"><span class="lat-key">P50</span><div class="lat-track"><div class="lat-fill" id="lf-p50" style="width:0%"></div></div><span class="lat-val" id="lv-p50">-</span></div>
+                <div class="lat-row"><span class="lat-key">P95</span><div class="lat-track"><div class="lat-fill" id="lf-p95" style="width:0%"></div></div><span class="lat-val" id="lv-p95">-</span></div>
+                <div class="lat-row" style="margin-bottom:0"><span class="lat-key">P99</span><div class="lat-track"><div class="lat-fill" id="lf-p99" style="width:0%"></div></div><span class="lat-val" id="lv-p99">-</span></div>
+            </div>
+            <div class="block">
+                <div class="blabel">Anomaly Detection</div>
+                <div class="grid2">
+                    <div class="mcard" style="padding:8px 10px"><div class="mval" style="font-size:15px" id="m-jumps">-</div><div class="mlbl">GPS Jumps</div></div>
+                    <div class="mcard" style="padding:8px 10px"><div class="mval" style="font-size:15px" id="m-zsc">-</div><div class="mlbl">Z-Score</div></div>
+                </div>
+            </div>
+            <div class="block" style="border-bottom:none;flex:1;display:flex;flex-direction:column;min-height:0;padding-bottom:0">
+                <div class="blabel">Live Buses</div>
+                <div class="bus-scroll" id="bus-list"><div class="empty"><div class="empty-icon">🔍</div>Waiting for buses...</div></div>
+            </div>
+        </aside>
+        <div id="map-wrap">
+            <div id="map"></div>
+            <div id="hud">
+                <div class="hline">Online: <b id="h-count">0</b></div>
+                <div class="hline">Queue: <b id="h-queue">-</b></div>
+                <div class="hline">Reconnects: <b id="h-reconn">0</b></div>
+            </div>
+            <div id="fbar">
+                <button class="fbtn on" id="fb-all" onclick="setFilter('all')">All</button>
+                <button class="fbtn" id="fb-high" onclick="setFilter('HIGH')">High Rel.</button>
+                <button class="fbtn" id="fb-low" onclick="setFilter('LOW')">Low Rel.</button>
+                <button class="fbtn" id="fb-trails" onclick="toggleTrails()">Trails</button>
+            </div>
+            <div id="detail">
+                <div class="dhead"><span class="dname" id="d-id">Bus #-</span><button class="dclose" onclick="closeDetail()">x</button></div>
+                <div class="drow"><span class="dkey">Speed</span><span class="dval" id="d-spd">-</span></div>
+                <div class="drow"><span class="dkey">Speed km/h</span><span class="dval" id="d-kmh">-</span></div>
+                <div class="drow"><span class="dkey">Reliability</span><span class="dval" id="d-rel">-</span></div>
+                <div class="drow"><span class="dkey">Heading</span><span class="dval" id="d-course">-</span></div>
+                <div class="drow"><span class="dkey">Passengers</span><span class="dval" id="d-pax">-</span></div>
+                <div class="drow"><span class="dkey">Updated</span><span class="dval" id="d-ago">-</span></div>
+            </div>
+        </div>
+    </main>
+    <script>
+        /**
+         * Lehigh Transit Enhancer - Frontend Dashboard
+         * -----------------------------------------------
+         * Real-time visualization layer for transit analytics
+         * 
+         * Responsibilities:
+         *  - Subscribe to SSE stream for live bus updates
+         *  - Render buses on Leaflet map
+         *  - Display system metrics dashboard
+         *  - Visualize latency + throughput sparkline
+         *  - Provide filtering + trail visualization
+         * 
+         * Data flow:
+         *  SSE (/stream) -> In-memory state -> Map + Sidebar UI
+         *  Poll (/metrics) -> Metrics UI + Sparkline
+         * 
+         * @version 1.0.0
+         */
+        const API='http://localhost:3000';
+        /** Global in-memory state 
+         * @type {Object.<string, Bus>}
+         */
+        let buses={} 
+        
+        /**
+         * Active Leaflet markers by busId
+         * @type {Object.<string, L.Marker>}
+         */
+        let markers={} 
+
+        /**
+         * Active Leaflet polylines (GPS trails)
+         * @type {Object.<string, L.Polyline>}
+         */
+        let trails={}
+
+        /**
+         * Currently selected bus ID
+         * @type {string|null}
+         */
+        let selected=null
+        
+        /**
+         * Active reliability filter
+         * @type {"all"|"HIGH"|"LOW"}
+         */
+        let filter='all'
+        
+        /**
+         * Whether trail visualization is enabled
+         * @type {boolean}
+         */
+        let showTrails=false;
+
+        /**
+         * Rolling 60-second throughput buffer
+         * @type {number[]}
+         */
+        let throughput=new Array(60).fill(0)
+        
+        /**
+         * Last processed message count (for delta calc)
+         * @type {number}
+         */
+        let lastProc=0
+
+        /**
+         * Canvas rendering context for sparkline
+         * @type {CanvasRenderingContext2D|null}
+         */
+        let sparkCtx=null
+
+        const map = L.map('map', {zoomControl:false}).setView([40.6068,-75.3780],15)
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution:'OpenStreetMap', maxZoom:19}).addTo(map)
+        L.control.zoom({position:'bottomright'}).addTo(map)
+
+        /**
+         * Returns color hex for reliability level
+         * 
+         * @param {"HIGH" | "LOW" | "STALE"} r
+         * @returns {string} Hex color string
+         */
+        function relColor(r){
+            return r === 'HIGH' ? '#10b981': r === 'LOW' ? '#f59e0b' : '#ef4444'
+        }
+
+        /**
+         * Creates a rotated Leaflet divIcon for a bus
+         * 
+         * @param {string} id
+         * @param {"HIGH" | "LOW" | "STALE"} rel
+         * @param {number} [course] - Heading in degrees
+         * @returns {L.DivIcon}
+         */
+        function busIcon(id, rel, course) {
+            const c = relColor(rel), a=course || 0
+            return L.divIcon({className:'', iconSize:[32,32], iconAnchor:[16,16],
+                html:'<div style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:'+c+'20;border:2px solid '+c+';border-radius:50%;transform:rotate('+a+'deg);transition:transform .4s;cursor:pointer;"><span style="transform:rotate(-'+a+'deg);font-size:15px;line-height:1;">🚍</span></div>'
+            })
+        }
+
+        /**
+         * Inserts or updates a bus marker on the map
+         * 
+         * Applies:
+         *  - Filtering logic
+         *  - Marker rotation update
+         *  - Optional trail rendering
+         *  - Detail panel refresh if selected
+         * 
+         * @param {string} id
+         * @param {Bus} bus
+         * @returns {void}
+         */
+        function upsertMarker(id, bus) {
+            if(filter !== 'all' && bus.reliability !== filter) {
+                removeMarker(id)
+                return
+            }
+
+            const ll= [bus.latitude, bus.longitude]
+            if(markers[id]) {
+                markers[id].setLatLng(ll)
+                markers[id].setIcon(busIcon(id, bus.reliability, bus.course))
+            } else{
+                markers[id] = L.marker(ll, {icon:busIcon(id, bus.reliability, bus.course)}).addTo(map).on('click', ()=>showDetail(id))
+            }
+
+            if(showTrails && bus.trail && bus.trail.length > 1) {
+                if (trails[id])
+                    map.removeLayer(trails[id]);
+                trails[id] = L.polyline(bus.trail.map(p => [p.lat, p.lon]), {color:relColor(bus.reliability), weight: 2, opacity: .45, dashArray: '4 4'}).addTo(map)
+            } else if (!showTrails && trails[id]) {
+                map.removeLayer(trails[id])
+                delete trails[id]
+            }
+
+            if(selected === id) {
+                refreshDetail(id, bus)
+            }
+        }
+
+        /**
+         * Removes marker and trail from map
+         * 
+         * @param {string} id
+         * @returns {void}
+         */
+        function removeMarker(id) {
+            if(markers[id]) {
+                map.removeLayer(markers[id])
+                delete markers[id]
+            }
+            if(trails[id]) {
+                map.removeLayer(trails[id])
+                delete trails[id]
+            }
+        }
+
+        /**
+         * Opens detail panel for selected bus
+         * 
+         * @param {string} id
+         * @return {void}
+         */
+        function showDetail(id) {
+            selected = id
+            document.getElementById('detail').classList.add('show')
+            refreshDetail(id, buses[id])
+            highlightList(id)
+        }
+
+        /**
+         * Updates detail panel fields with latest bus data
+         * 
+         * @param {string} id
+         * @param {Bus} us
+         * @returns {void}
+         */
+        function refreshDetail(id, bus) {
+            if(!bus) return;
+            document.getElementById('d-id').textContent='Bus #' + id
+            document.getElementById('d-spd').textContent=bus.speed+' m/s'
+            document.getElementById('d-kmh').textContent=(bus.speedKmh || (bus.speed*3.6).toFixed(2))+' km/h'
+            document.getElementById('d-rel').textContent=bus.reliability
+            document.getElementById('d-course').textContent=(bus.course||0)+'deg'
+            document.getElementById('d-pax').textContent=bus.paxLoad!=null?bus.paxLoad:'N/A'
+            document.getElementById('d-ago').textContent=Math.round((Date.now()-bus.timestamp)/1000)+'s ago'
+        }
+
+        /**
+         * Closes the detail panel
+         * 
+         * @returns {void}
+         */
+        function closeDetail() {
+            selected = null
+            document.getElementById('detail').classList.remove('show')
+            highlightList(null)
+        }
+
+        /**
+         * Renders sidebar list of active buses
+         * 
+         * Sorted by most recent update
+         * 
+         * @returns {void}
+         */
+        function renderList() {
+            const el = document.getElementById('bus-list')
+            const ids = Object.keys(buses)
+            if(!ids.length) {
+                el.innerHTML='<div class="empty"><div class="empty-icon">🔍</div>Waiting for buses...</div>'
+                return
+            }
+            el.innerHTML = ids.sort((a, b) => buses[b].timestamp-buses[a].timestamp).map(id => {
+                const b = buses[id], c = relColor(b.reliability)
+                return '<div class="bitem'+(selected===id? ' sel':'') + '" onclick="showDetail(\''+id+'\')"><div class="bdot" style="background:'+c+'"></div><span class="bid">#'+id+'</span><span class="bspd">'+b.speed+' m/s</span><span class="badge b'+b.reliability+'">'+b.reliability+'</span></div>'
+            }).join('')
+        }
+
+        /**
+         * Highlights selected bus in sidebar
+         * 
+         * @param {string|null} id
+         * @returns {void}
+         */
+        function highlightList(id) {
+            document.querySelectorAll('.bitem').forEach(el=>el.classList.toggle('sel', !!id&&el.querySelector('.bid') && el.querySelector('.bid').textContent==='#' + id))
+        }
+
+        /**
+         * Applies reliability filter to map and list
+         * 
+         * @param {"all" | "HIGH" | "LOW"} f
+         * @returns {void}
+         */
+        function setFilter(f) {
+            filter = f
+            document.querySelectorAll('.fbtn').forEach(b => b.classList.remove('on'))
+            var m = {all: 'fb-all', HIGH:'fb-high', LOW:'fb-low'}
+            if(m[f]) {
+                document.getElementById(m[f]).classList.add('on')
+            }
+            Object.keys(buses).forEach(id => {
+                if(f !== 'all' && buses[id].reliability !== f) {
+                    removeMarker(id)
+                } else {
+                    upsertMarker(id, buses[id])
+                }
+            })
+        }
+
+        /**
+         * Toggles GPS trail rendering for all buses
+         * 
+         * @returns {void}
+         */
+        function toggleTrails() {
+            showTrails = !showTrails
+            document.getElementById('fb-trails').classList.toggle('on', showTrails)
+            Object.keys(buses).forEach(id => upsertMarker(id, buses[id]))
+        }
+
+        /**
+         * Establishes Server-Sent Evnets connection to backend /stream endpoint
+         * 
+         * Handles:
+         *  - Live updates
+         *  - UI status indicator
+         *  - Auto-reconnect on error
+         * 
+         * @returns {void}
+         */
+        function connectSSE() {
+            const es=new EventSource(API+'/stream')
+            es.onopen = function() {
+                document.getElementById('dot').className='dot live'
+                document.getElementById('status').textContent='LIVE'
+            }
+            es.onmessage = function(e) {
+                const d = JSON.parse(e.data)
+                if(!d.busId)
+                    return
+                buses[d.busId] = d
+                upsertMarker(d.busId, d)
+                renderList()
+                document.getElementById('ts').textContent = new Date().toLocaleTimeString()
+            }
+            es.onerror = function() {
+                document.getElementById('dot').className = 'dot error'
+                document.getElementById('status').textContent='RECONNECTING'
+                setTimeout(function() {
+                    es.close()
+                    connectSSE()
+                }, 3000)
+            }
+        }
+
+        /**
+         * Polls backend /metrics endpoint
+         * 
+         * Updates:
+         *  - KPI cards
+         *  - Latency bars
+         *  - Throughput calculation
+         *  - HUD indicators
+         * 
+         * @returns {Promise<void>}
+         */
+        async function pollMetrics() {
+            try {
+                const m = await(await fetch(API+'/metrics')).json()
+                function s(id,v) {
+                    var el = document.getElementById(id)
+                    if(el) {
+                        el.textContent = v
+                    }
+                }
+                function fmt(n) {
+                    return n >= 1000 ? (n/1000).toFixed(1) + 'k' : n
+                }
+                s('m-active', m.active_buses)
+                s('m-acc', m.data_accuracy_pct + '%')
+                s('m-proc', fmt(m.messages_processed))
+                s('m-rej', fmt(m.messages_rejected))
+                s('m-jumps', m.gps_jumps_filtered)
+                s('m-zsc', m.zscore_filtered)
+                s('m-throughput', m.throughput_msg_per_sec+ ' /s')
+                s('h-count', m.active_buses)
+                s('h-queue', m.queue_depth)
+                s('h-reconn', m.ws_reconnects)
+                ['p50', 'p95', 'p99'].forEach(function(k) {
+                    var val = m['latency_' + k + '_ms']
+                    s('lv-' + k, val + 'ms')
+                    var el = document.getElementById('lf-' + k)
+                    if(el) {
+                        el.style.width = Math.min(100, (val/10) * 100) + '%'
+                    }
+                })
+                var delta = m.messages_processed-lastProc
+                lastProc=m.messages_processed
+                throughput.push(delta)
+                throughput.shift()
+                drawSpark()
+            } catch (e) {}
+        }
+
+        /**
+         * Initializes sparkline canvas with proper devicePixelRatio scaling
+         * 
+         * @returns {void}
+         */
+        function initSpark() {
+            var canvas = document.getElementById('spark')
+            sparkCtx = canvas.getContext('2d')
+            var dpr = window.devicePixelRatio || 1
+            var rect = canvas.parentElement.getBoundingClientRect()
+            canvas.width = rect.width * dpr
+            canvas.height = rect.height * dpr
+            canvas.style.width = rect.width + 'px'
+            canvas.style.height = rect.height + 'px'
+            sparkCtx.scale(dpr, dpr)
+        }
+
+        /**
+         * Draws throughput sparkline (area + line)
+         * 
+         * Uses rolling 60-second buffer
+         * 
+         * @returns {void}
+         */
+        function drawSpark() {
+            if(!sparkCtx) 
+                return
+            var dpr = window.devicePixelRatio || 1, w=sparkCtx.canvas.width/dpr, h=sparkCtx.canvas.height/dpr
+            sparkCtx.clearRect(0,0,w,h)
+            var max = Math.max.apply(null, throughput.concat([1])), step=w/(throughput.length - 1)
+            var grad = sparkCtx.createLinearGradient(0,0,0,h)
+            grad.addColorStop(0, 'rgba(139,92,246,.38)')
+            grad.addColorStop(1, 'rgba(139,92,246,0)')
+            sparkCtx.beginPath()
+            throughput.forEach(function(v, i) {
+                var x = i * step, y = h - (v/max) * (h-3) - 2
+                i === 0 ? sparkCtx.moveTo(x, y) : sparkCtx.lineTo(x,y)
+            })
+            sparkCtx.lineTo(w, h)
+            sparkCtx.lineTo(0, h)
+            sparkCtx.closePath()
+            sparkCtx.fillStyle = grad
+            sparkCtx.fill()
+            sparkCtx.beginPath()
+            throughput.forEach(function(v, i) {
+                var x=i*step, y = h - (v/max) * (h-3) - 2
+                i === 0 ? sparkCtx.moveTo(x,y) : sparkCtx.lineTo(x, y)
+            })
+            sparkCtx.strokeStyle = '#8b5cf6'
+            sparkCtx.lineWidth = 1.5
+            sparkCtx.stroke()
+        }
+
+        /**
+         * Application bootstrap lifecycle
+         * 
+         * Initializes:
+         *  - Sparkline
+         *  - SSE Connection
+         *  - Metrics polling interval
+         *  - Sidebar refresh
+         *  - Detail auto-refresh
+         */
+        window.addEventListener('load', function() {
+            initSpark()
+            connectSSE()
+            pollMetrics()
+            setInterval(pollMetrics, 2000)
+            setInterval(renderList, 5000)
+            setInterval(function() {
+                if(selected && buses[selected])
+                    refreshDetail(selected, buses[selected])
+            }, 1000)
+        })
+
+
+    </script>
+</body>
+</html>
